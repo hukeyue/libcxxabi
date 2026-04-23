@@ -36,6 +36,12 @@ namespace {
 // When POSIX threads are not available, make the mutex operations a nop
 #ifndef _LIBCXXABI_HAS_NO_THREADS
 static _LIBCPP_CONSTINIT std::__libcpp_mutex_t heap_mutex = _LIBCPP_MUTEX_INITIALIZER;
+#if _LIBCPP_HAS_THREAD_API_WIN32 && _WIN32_WINNT < 0x0600
+static _LIBCPP_CONSTINIT std::__libcpp_exec_once_flag heap_mutex_once_ = _LIBCPP_EXEC_ONCE_INITIALIZER;
+static void static_heap_mutex_init() {
+  std::__libcpp_mutex_init(&heap_mutex);
+}
+#endif
 #else
 static _LIBCPP_CONSTINIT void* heap_mutex = 0;
 #endif
@@ -132,6 +138,9 @@ bool is_fallback_ptr(void* ptr) {
 void* fallback_malloc(size_t len) {
   heap_node *p, *prev;
   const size_t nelems = alloc_size(len);
+#if _LIBCPP_HAS_THREAD_API_WIN32 && _WIN32_WINNT < 0x0600
+  std::__libcpp_execute_once(&heap_mutex_once_, static_heap_mutex_init);
+#endif
   mutexor mtx(&heap_mutex);
 
   if (NULL == freelist)
@@ -191,6 +200,9 @@ void fallback_free(void* ptr) {
   struct heap_node* cp = ((struct heap_node*)ptr) - 1; // retrieve the chunk
   struct heap_node *p, *prev;
 
+#if _LIBCPP_HAS_THREAD_API_WIN32 && _WIN32_WINNT < 0x0600
+  std::__libcpp_execute_once(&heap_mutex_once_, static_heap_mutex_init);
+#endif
   mutexor mtx(&heap_mutex);
 
 #ifdef DEBUG_FALLBACK_MALLOC

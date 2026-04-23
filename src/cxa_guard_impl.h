@@ -283,15 +283,38 @@ struct LibcppCondVar;
 #ifndef _LIBCXXABI_HAS_NO_THREADS
 struct LibcppMutex {
   LibcppMutex() = default;
+
+#if _LIBCPP_HAS_THREAD_API_WIN32 && _WIN32_WINNT < 0x0600
+  static void init(void *p) {
+    auto self = reinterpret_cast<LibcppMutex*>(p);
+    std::__libcpp_mutex_init(&self->mutex);
+  }
+#endif
+
   LibcppMutex(LibcppMutex const&) = delete;
   LibcppMutex& operator=(LibcppMutex const&) = delete;
 
-  bool lock() { return std::__libcpp_mutex_lock(&mutex); }
-  bool unlock() { return std::__libcpp_mutex_unlock(&mutex); }
+  bool lock() {
+#if _LIBCPP_HAS_THREAD_API_WIN32 && _WIN32_WINNT < 0x0600
+    std::__libcpp_execute_once(&mutex_once_, this, &LibcppMutex::init);
+#endif
+    return std::__libcpp_mutex_lock(&mutex);
+  }
+
+  bool unlock() {
+#if _LIBCPP_HAS_THREAD_API_WIN32 && _WIN32_WINNT < 0x0600
+    std::__libcpp_execute_once(&mutex_once_, this, &LibcppMutex::init);
+#endif
+    return std::__libcpp_mutex_unlock(&mutex);
+  }
 
 private:
   friend struct LibcppCondVar;
   std::__libcpp_mutex_t mutex = _LIBCPP_MUTEX_INITIALIZER;
+
+#if _LIBCPP_HAS_THREAD_API_WIN32 && _WIN32_WINNT < 0x0600
+  std::__libcpp_exec_once_flag mutex_once_ = _LIBCPP_EXEC_ONCE_INITIALIZER;
+#endif
 };
 
 struct LibcppCondVar {
@@ -299,11 +322,33 @@ struct LibcppCondVar {
   LibcppCondVar(LibcppCondVar const&) = delete;
   LibcppCondVar& operator=(LibcppCondVar const&) = delete;
 
-  bool wait(LibcppMutex& mut) { return std::__libcpp_condvar_wait(&cond, &mut.mutex); }
-  bool broadcast() { return std::__libcpp_condvar_broadcast(&cond); }
+#if _LIBCPP_HAS_THREAD_API_WIN32 && _WIN32_WINNT < 0x0600
+  static void init(void *p) {
+    auto self = reinterpret_cast<LibcppCondVar*>(p);
+    std::__libcpp_condvar_init(&self->cond);
+  }
+#endif
+
+  bool wait(LibcppMutex& mut) {
+#if _LIBCPP_HAS_THREAD_API_WIN32 && _WIN32_WINNT < 0x0600
+    std::__libcpp_execute_once(&condvar_once_, this, &LibcppMutex::init);
+#endif
+    return std::__libcpp_condvar_wait(&cond, &mut.mutex);
+  }
+
+  bool broadcast() {
+#if _LIBCPP_HAS_THREAD_API_WIN32 && _WIN32_WINNT < 0x0600
+    std::__libcpp_execute_once(&condvar_once_, this, &LibcppMutex::init);
+#endif
+    return std::__libcpp_condvar_broadcast(&cond);
+  }
 
 private:
   std::__libcpp_condvar_t cond = _LIBCPP_CONDVAR_INITIALIZER;
+
+#if _LIBCPP_HAS_THREAD_API_WIN32 && _WIN32_WINNT < 0x0600
+  std::__libcpp_exec_once_flag condvar_once_ = _LIBCPP_EXEC_ONCE_INITIALIZER;
+#endif
 };
 #else
 struct LibcppMutex {};
